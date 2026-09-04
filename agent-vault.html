@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agent Vault — Stellar AI Treasury</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#07080f;--surf:#0e1018;--surf2:#131520;--surf3:#181d2e;
+  --indigo:#6366f1;--indigo2:#4f46e5;--green:#10b981;--amber:#f59e0b;--cyan:#06b6d4;--red:#ef4444;
+  --text:#e2e8f0;--muted:#64748b;--border:rgba(99,102,241,0.2);
+  --sidebar:240px;
+}
+body{font-family:'Space Grotesk',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+canvas#bg{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.4}
+
+/* LAYOUT */
+.app{position:relative;z-index:1;display:flex;min-height:100vh}
+.sidebar{width:var(--sidebar);background:var(--surf);border-right:1px solid var(--border);position:fixed;top:0;left:0;height:100vh;display:flex;flex-direction:column;z-index:100;transition:transform .3s}
+.main{margin-left:var(--sidebar);flex:1;display:flex;flex-direction:column;min-height:100vh}
+.topbar{height:56px;background:var(--surf);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 24px;position:sticky;top:0;z-index:50}
+.content{padding:28px;flex:1}
+.page{display:none}.page.active{display:block}
+
+/* SIDEBAR */
+.logo{padding:20px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--border)}
+.hex{width:36px;height:36px;clip-path:polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%);background:linear-gradient(135deg,var(--indigo),var(--cyan));display:flex;align-items:center;justify-content:center;font-size:16px;animation:hexSpin 8s linear infinite}
+@keyframes hexSpin{0%{filter:hue-rotate(0deg)}100%{filter:hue-rotate(360deg)}}
+.logo-text{font-size:15px;font-weight:700;background:linear-gradient(90deg,#fff,var(--cyan));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.logo-sub{font-size:10px;color:var(--muted);font-family:'JetBrains Mono',monospace}
+.nav{flex:1;padding:16px 12px;display:flex;flex-direction:column;gap:4px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:10px;cursor:pointer;font-size:13px;font-weight:500;color:var(--muted);transition:all .2s;border:none;background:transparent;width:100%;text-align:left}
+.nav-item:hover{background:var(--surf2);color:var(--text)}
+.nav-item.active{background:linear-gradient(135deg,rgba(99,102,241,.2),rgba(6,182,212,.1));color:var(--indigo);border:1px solid rgba(99,102,241,.3)}
+.nav-icon{font-size:16px;width:20px;text-align:center}
+.sidebar-footer{padding:16px;border-top:1px solid var(--border);font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace}
+.contract-id{word-break:break-all;color:var(--cyan);font-size:9px;margin-top:4px}
+
+/* TOPBAR */
+.topbar-left{display:flex;align-items:center;gap:16px}
+.page-title{font-size:15px;font-weight:600}
+.breadcrumb{font-size:12px;color:var(--muted)}
+.topbar-right{display:flex;align-items:center;gap:16px}
+.clock{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--cyan)}
+.block-num{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);background:var(--surf2);padding:4px 10px;border-radius:6px;border:1px solid var(--border)}
+.net-badge{background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3);color:var(--green);font-size:11px;padding:4px 10px;border-radius:6px;display:flex;align-items:center;gap:6px}
+.net-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* CARDS */
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+.kpi{background:var(--surf);border-radius:14px;padding:20px;border:1px solid var(--border);position:relative;overflow:hidden;animation:fadeUp .5s ease both}
+.kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--indigo),var(--cyan))}
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+.kpi-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px}
+.kpi-val{font-size:26px;font-weight:700;font-family:'JetBrains Mono',monospace;margin-bottom:4px}
+.kpi-sub{font-size:12px;color:var(--muted)}
+.kpi-icon{position:absolute;right:16px;top:16px;font-size:28px;opacity:.2}
+.v-indigo{color:var(--indigo)} .v-green{color:var(--green)} .v-amber{color:var(--amber)} .v-cyan{color:var(--cyan)}
+
+/* CARDS GENERIC */
+.card{background:var(--surf);border-radius:14px;padding:22px;border:1px solid var(--border);margin-bottom:16px}
+.card-title{font-size:14px;font-weight:600;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+
+/* FLOW */
+.flow-row{display:flex;align-items:center;gap:0;margin:20px 0;background:var(--surf2);border-radius:12px;padding:16px;border:1px solid var(--border)}
+.flow-box{flex:1;text-align:center;padding:12px 8px;border-radius:8px;border:1px solid var(--border);background:var(--surf)}
+.flow-box-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
+.flow-box-val{font-size:13px;font-weight:600}
+.flow-arrow{padding:0 8px;color:var(--indigo);font-size:18px;flex-shrink:0;animation:arrowPulse 1.5s ease-in-out infinite}
+@keyframes arrowPulse{0%,100%{opacity:.4;transform:translateX(0)}50%{opacity:1;transform:translateX(3px)}}
+
+/* PROGRESS */
+.prog-wrap{margin:8px 0}
+.prog-label{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:6px}
+.prog-bar{height:6px;background:rgba(255,255,255,.06);border-radius:3px;overflow:hidden}
+.prog-fill{height:100%;border-radius:3px;position:relative;overflow:hidden}
+.prog-fill::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.3),transparent);animation:shimmer 2s linear infinite}
+@keyframes shimmer{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
+.pf-indigo{background:linear-gradient(90deg,var(--indigo),var(--cyan))}
+.pf-green{background:linear-gradient(90deg,var(--green),var(--cyan))}
+.pf-amber{background:linear-gradient(90deg,var(--amber),var(--red))}
+
+/* BADGES */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500}
+.b-indigo{background:rgba(99,102,241,.15);color:var(--indigo);border:1px solid rgba(99,102,241,.3)}
+.b-green{background:rgba(16,185,129,.15);color:var(--green);border:1px solid rgba(16,185,129,.3)}
+.b-amber{background:rgba(245,158,11,.15);color:var(--amber);border:1px solid rgba(245,158,11,.3)}
+.b-cyan{background:rgba(6,182,212,.15);color:var(--cyan);border:1px solid rgba(6,182,212,.3)}
+.b-red{background:rgba(239,68,68,.15);color:var(--red);border:1px solid rgba(239,68,68,.3)}
+
+/* TABLE */
+.table{width:100%;border-collapse:collapse}
+.table th{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;padding:10px 14px;border-bottom:1px solid var(--border);text-align:left}
+.table td{padding:12px 14px;border-bottom:1px solid rgba(255,255,255,.04);font-size:13px}
+.table tr:hover td{background:rgba(255,255,255,.02)}
+.mono{font-family:'JetBrains Mono',monospace;font-size:11px}
+
+/* INPUTS */
+.inp{width:100%;background:var(--surf2);border:1px solid var(--border);border-radius:8px;padding:9px 13px;color:var(--text);font-size:13px;font-family:'Space Grotesk',sans-serif;outline:none;transition:border .2s;margin-bottom:10px}
+.inp:focus{border-color:var(--indigo)}
+.inp::placeholder{color:var(--muted)}
+.btn{padding:9px 20px;border-radius:8px;border:none;cursor:pointer;font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:500;transition:all .2s}
+.btn-p{background:linear-gradient(135deg,var(--indigo),var(--indigo2));color:#fff}
+.btn-p:hover{opacity:.9;transform:scale(1.02)}
+.btn-g{background:linear-gradient(135deg,var(--green),#059669);color:#fff}
+.btn-g:hover{opacity:.9}
+.btn-sm{padding:6px 14px;font-size:12px}
+.btn-full{width:100%}
+
+/* CODE */
+.code-block{background:#0a0b14;border:1px solid rgba(99,102,241,.2);border-radius:10px;padding:16px;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.7;overflow-x:auto;margin:10px 0}
+.kw{color:#c792ea} .fn{color:#82aaff} .ty{color:#ffcb6b} .cm{color:#546e7a} .st{color:#c3e88d} .nu{color:#f78c6c}
+
+/* TOAST */
+.toast-wrap{position:fixed;bottom:24px;right:24px;z-index:999;display:flex;flex-direction:column;gap:8px}
+.toast{background:var(--surf2);border-radius:10px;padding:12px 16px;font-size:13px;border-left:3px solid var(--green);box-shadow:0 8px 24px rgba(0,0,0,.4);animation:toastIn .3s ease;max-width:280px}
+@keyframes toastIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
+
+/* MODAL */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;display:none;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
+.modal-bg.open{display:flex}
+.modal{background:var(--surf);border-radius:16px;padding:28px;border:1px solid var(--border);max-width:460px;width:90%;animation:fadeUp .3s ease}
+
+/* AGENT CARDS */
+.agent-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+.agent-card{background:var(--surf);border-radius:14px;padding:20px;border:1px solid var(--border);transition:border .2s}
+.agent-card:hover{border-color:rgba(99,102,241,.5)}
+.agent-avatar{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:12px}
+
+/* TERMINAL */
+.terminal{background:#050508;border:1px solid rgba(99,102,241,.3);border-radius:10px;padding:16px;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.8;min-height:200px}
+.t-prompt{color:var(--green)} .t-cmd{color:#fff} .t-out{color:var(--cyan)} .t-err{color:var(--amber)}
+
+/* SVG CHART */
+.chart-wrap{position:relative;margin:8px 0}
+
+/* ETHERFUSE FLOW */
+.ef-flow{display:flex;align-items:stretch;gap:0;margin:16px 0;border-radius:12px;overflow:hidden;border:1px solid var(--border)}
+.ef-step{flex:1;padding:16px;text-align:center;border-right:1px solid var(--border);position:relative}
+.ef-step:last-child{border-right:none}
+.ef-step-num{width:24px;height:24px;border-radius:50%;background:var(--indigo);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;margin:0 auto 8px}
+.ef-step-icon{font-size:22px;margin-bottom:6px}
+.ef-step-label{font-size:11px;font-weight:600;margin-bottom:4px}
+.ef-step-sub{font-size:10px;color:var(--muted)}
+
+/* TEAM */
+.team-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px}
+.team-card{background:var(--surf);border-radius:14px;padding:20px;border:1px solid var(--border);text-align:center}
+.team-avatar{width:56px;height:56px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:26px;margin:0 auto 12px}
+.team-role{font-size:12px;color:var(--muted);margin-bottom:8px}
+.checklist{text-align:left;margin-top:12px}
+.check-item{font-size:11px;color:var(--muted);padding:3px 0;display:flex;align-items:center;gap:6px}
+.check-item.done{color:var(--green)}
+
+@media(max-width:900px){
+  .sidebar{transform:translateX(-100%)}
+  .main{margin-left:0}
+  .kpi-grid{grid-template-columns:1fr 1fr}
+  .grid2{grid-template-columns:1fr}
+}
+@media(max-width:480px){
+  .kpi-grid{grid-template-columns:1fr}
+  .content{padding:16px}
+}
+</style>
+</head>
+<body>
+<canvas id="bg"></canvas>
+
+<div class="app">
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="logo">
+    <div class="hex">🔐</div>
+    <div>
+      <div class="logo-text">Agent Vault</div>
+      <div class="logo-sub">Stellar AI Treasury</div>
+    </div>
+  </div>
+  <nav class="nav">
+    <button class="nav-item active" onclick="go('dashboard',this)"><span class="nav-icon">📊</span>Dashboard</button>
+    <button class="nav-item" onclick="go('contrato',this)"><span class="nav-icon">📋</span>Contrato Soroban</button>
+    <button class="nav-item" onclick="go('defindex',this)"><span class="nav-icon">💹</span>DeFindex</button>
+    <button class="nav-item" onclick="go('x402',this)"><span class="nav-icon">⚡</span>x402 Protocol</button>
+    <button class="nav-item" onclick="go('agentes',this)"><span class="nav-icon">🤖</span>Agentes</button>
+    <button class="nav-item" onclick="go('auditoria',this)"><span class="nav-icon">🔍</span>Auditoría</button>
+    <button class="nav-item" onclick="go('etherfuse',this)"><span class="nav-icon">🌎</span>Etherfuse SPEI</button>
+    <button class="nav-item" onclick="go('equipo',this)"><span class="nav-icon">👥</span>Equipo</button>
+  </nav>
+  <div class="sidebar-footer">
+    <div>Contract ID</div>
+    <div class="contract-id">CAO7PTSXDTAQ7AA7JY47ETR3JBEVWLKDT3SVN47KRMSQWUDXISUZ47AP</div>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<div class="main">
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="page-title" id="page-title">Dashboard</div>
+      <div class="breadcrumb">Agent Vault / <span id="page-crumb">Overview</span></div>
+    </div>
+    <div class="topbar-right">
+      <div class="clock" id="clock">00:00:00</div>
+      <div class="block-num">Block #<span id="block">1,624,238</span></div>
+      <div class="net-badge"><div class="net-dot"></div>Stellar Testnet</div>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- DASHBOARD -->
+    <div class="page active" id="p-dashboard">
+      <div class="kpi-grid">
+        <div class="kpi" style="animation-delay:.0s">
+          <div class="kpi-icon">🏦</div>
+          <div class="kpi-label">Balance del Vault</div>
+          <div class="kpi-val v-indigo">85,000 <span style="font-size:14px">MXNe</span></div>
+          <div class="kpi-sub">≈ $4,941 USD</div>
+        </div>
+        <div class="kpi" style="animation-delay:.1s">
+          <div class="kpi-icon">💹</div>
+          <div class="kpi-label">En DeFindex</div>
+          <div class="kpi-val v-green">50,000 <span style="font-size:14px">MXNe</span></div>
+          <div class="kpi-sub">Generando 4.2% APY</div>
+        </div>
+        <div class="kpi" style="animation-delay:.2s">
+          <div class="kpi-icon">📈</div>
+          <div class="kpi-label">Yield Acumulado</div>
+          <div class="kpi-val v-amber" id="yield-val">+347 <span style="font-size:14px">MXNe</span></div>
+          <div class="kpi-sub">Desde el depósito inicial</div>
+        </div>
+        <div class="kpi" style="animation-delay:.3s">
+          <div class="kpi-icon">🤖</div>
+          <div class="kpi-label">Agentes Activos</div>
+          <div class="kpi-val v-cyan">5 <span style="font-size:14px">/ 5</span></div>
+          <div class="kpi-sub">3 activos · 1 pausado · 1 idle</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">⚡ Flujo del Sistema</div>
+        <div class="flow-row">
+          <div class="flow-box"><div class="flow-box-label">Vault</div><div class="flow-box-val v-indigo">85,000 MXNe</div></div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-box"><div class="flow-box-label">DeFindex</div><div class="flow-box-val v-green">50,000 MXNe</div></div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-box"><div class="flow-box-label">Agente</div><div class="flow-box-val v-cyan">Policy Check</div></div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-box"><div class="flow-box-label">x402</div><div class="flow-box-val v-amber">API Pay</div></div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-box"><div class="flow-box-label">Etherfuse</div><div class="flow-box-val v-green">SPEI MXN</div></div>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="card">
+          <div class="card-title">🤖 Agentes — Límite Diario</div>
+          <div class="prog-wrap"><div class="prog-label"><span>Agente Nómina</span><span class="v-green">3,200 / 5,000</span></div><div class="prog-bar"><div class="prog-fill pf-green" style="width:64%"></div></div></div>
+          <div class="prog-wrap"><div class="prog-label"><span>Agente Proveedores</span><span class="v-amber">4,500 / 5,000</span></div><div class="prog-bar"><div class="prog-fill pf-amber" style="width:90%"></div></div></div>
+          <div class="prog-wrap"><div class="prog-label"><span>Agente x402</span><span class="v-indigo">800 / 2,000</span></div><div class="prog-bar"><div class="prog-fill pf-indigo" style="width:40%"></div></div></div>
+          <div class="prog-wrap"><div class="prog-label"><span>Agente SPEI</span><span class="v-green">1,200 / 10,000</span></div><div class="prog-bar"><div class="prog-fill pf-green" style="width:12%"></div></div></div>
+        </div>
+        <div class="card">
+          <div class="card-title">📋 Log de Transacciones</div>
+          <table class="table">
+            <tr><th>Hash</th><th>Tipo</th><th>Monto</th><th>Estado</th></tr>
+            <tr><td class="mono">a3f7...c2d1</td><td>deposit</td><td>10,000</td><td><span class="badge b-green">✓ OK</span></td></tr>
+            <tr><td class="mono">b8e2...a4f9</td><td>transfer</td><td>3,200</td><td><span class="badge b-green">✓ OK</span></td></tr>
+            <tr><td class="mono">c1d5...f3b8</td><td>x402</td><td>50</td><td><span class="badge b-cyan">✓ OK</span></td></tr>
+            <tr><td class="mono">d9a1...e7c4</td><td>transfer</td><td>8,000</td><td><span class="badge b-red">✗ Límite</span></td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONTRATO SOROBAN -->
+    <div class="page" id="p-contrato">
+      <div class="card">
+        <div class="card-title">🔐 Policy Engine — execute_transfer</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+          <span class="badge b-red">1. Agente autorizado</span>
+          <span class="badge b-amber">2. Vault activo</span>
+          <span class="badge b-indigo">3. Whitelist</span>
+          <span class="badge b-cyan">4. Límite de ventana</span>
+          <span class="badge b-green">5. Saldo suficiente</span>
+        </div>
+        <div class="code-block"><span class="kw">pub fn</span> <span class="fn">execute_transfer</span>(env: <span class="ty">Env</span>, owner: <span class="ty">Address</span>, recipient: <span class="ty">Address</span>, amount: <span class="ty">i128</span>) -> <span class="ty">Result</span>&lt;(), <span class="ty">VaultError</span>&gt; {
+  config.agent.<span class="fn">require_auth</span>();           <span class="cm">// 1. Agente autorizado</span>
+  <span class="kw">if</span> config.paused { <span class="kw">return</span> <span class="ty">Err</span>(<span class="ty">VaultError</span>::Paused); }  <span class="cm">// 2. Vault activo</span>
+  <span class="kw">if</span> !whitelist.<span class="fn">contains</span>(&recipient) { ... }  <span class="cm">// 3. Whitelist</span>
+  <span class="kw">if</span> spent + amount > config.limit { ... }    <span class="cm">// 4. Límite ventana</span>
+  <span class="kw">if</span> state.balance < amount { ... }            <span class="cm">// 5. Saldo suficiente</span>
+  token_client.<span class="fn">transfer</span>(&contract, &recipient, &amount);
+}</div>
+      </div>
+      <div class="grid2">
+        <div>
+          <div class="card">
+            <div class="card-title"><span class="badge b-green" style="margin-right:8px">CORE</span>Funciones principales</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div class="code-block" style="padding:10px"><span class="kw">pub fn</span> <span class="fn">init_vault</span>(env, owner, agent, token, whitelist, window_ledgers, limit)</div>
+              <div class="code-block" style="padding:10px"><span class="kw">pub fn</span> <span class="fn">deposit</span>(env, owner, amount) <span class="cm">// transfiere tokens reales</span></div>
+              <div class="code-block" style="padding:10px"><span class="kw">pub fn</span> <span class="fn">execute_transfer</span>(env, owner, recipient, amount)</div>
+              <div class="code-block" style="padding:10px"><span class="kw">pub fn</span> <span class="fn">withdraw</span>(env, owner, amount)</div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="card">
+            <div class="card-title"><span class="badge b-amber" style="margin-right:8px">ADMIN</span>Administración</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div class="code-block" style="padding:10px"><span class="kw">pub fn</span> <span class="fn">set_paused</span>(env, owner, paused: <span class="ty">bool</span>)</div>
+              <div class="code-block" style="padding:10px"><span class="kw">pub fn</span> <span class="fn">set_agent</span>(env, owner, new_agent: <span class="ty">Address</span>)</div>
+              <div class="code-block" style="padding:10px"><span class="kw">pub fn</span> <span class="fn">set_whitelist</span>(env, owner, whitelist: <span class="ty">Vec</span>&lt;<span class="ty">Address</span>&gt;)</div>
+              <div class="code-block" style="padding:10px"><span class="kw">pub fn</span> <span class="fn">set_limits</span>(env, owner, limit, window_ledgers)</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-title"><span class="badge b-cyan" style="margin-right:8px">QUERY</span>Lectura</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div class="code-block" style="padding:10px"><span class="kw">pub fn</span> <span class="fn">get_state</span> / <span class="fn">get_config</span> / <span class="fn">get_balance</span> / <span class="fn">get_whitelist</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DEFINDEX -->
+    <div class="page" id="p-defindex">
+      <div class="card" style="background:linear-gradient(135deg,rgba(16,185,129,.08),rgba(6,182,212,.05));border-color:rgba(16,185,129,.3)">
+        <div style="display:flex;align-items:center;gap:20px">
+          <div style="font-size:48px">💹</div>
+          <div>
+            <div style="font-size:24px;font-weight:700;color:var(--green)">4.2% APY</div>
+            <div style="font-size:14px;color:var(--muted)">Rendimiento automático sobre fondos del vault via DeFindex</div>
+            <div style="margin-top:8px;display:flex;gap:8px"><span class="badge b-green">50,000 MXNe activos</span><span class="badge b-cyan">Stellar Testnet</span></div>
+          </div>
+          <div style="margin-left:auto;text-align:right">
+            <div style="font-size:28px;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--amber)" id="yield-big">+347 MXNe</div>
+            <div style="font-size:12px;color:var(--muted)">yield acumulado</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">📈 Rendimiento acumulado</div>
+        <svg width="100%" height="120" viewBox="0 0 600 120">
+          <defs><linearGradient id="gr" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#10b981" stop-opacity=".4"/><stop offset="100%" stop-color="#10b981" stop-opacity="0"/></linearGradient></defs>
+          <path d="M0,110 C50,100 100,90 150,80 S250,55 300,45 S400,25 450,18 S550,12 600,8" fill="none" stroke="#10b981" stroke-width="2.5"/>
+          <path d="M0,110 C50,100 100,90 150,80 S250,55 300,45 S400,25 450,18 S550,12 600,8 L600,120 L0,120Z" fill="url(#gr)"/>
+          <text x="10" y="115" fill="#64748b" font-size="10" font-family="JetBrains Mono">Día 1</text>
+          <text x="540" y="115" fill="#64748b" font-size="10" font-family="JetBrains Mono">Hoy</text>
+        </svg>
+      </div>
+
+      <div class="grid2">
+        <div class="card">
+          <div class="card-title">deposit() — DeFindex</div>
+          <div class="code-block"><span class="kw">pub fn</span> <span class="fn">deposit</span>(
+  e: <span class="ty">Env</span>,
+  amounts: <span class="ty">Vec</span>&lt;<span class="ty">i128</span>&gt;,
+  min_mediation: <span class="ty">i128</span>,
+  from: <span class="ty">Address</span>,
+) -> <span class="ty">Result</span>&lt;<span class="ty">i128</span>, <span class="ty">ContractError</span>&gt;</div>
+          <button class="btn btn-g btn-full" style="margin-top:8px" onclick="toast('✅ Simulando depósito en DeFindex...','green')">Simular Depósito</button>
+        </div>
+        <div class="card">
+          <div class="card-title">withdraw() — DeFindex</div>
+          <div class="code-block"><span class="kw">pub fn</span> <span class="fn">withdraw</span>(
+  e: <span class="ty">Env</span>,
+  df_shares: <span class="ty">i128</span>,
+  min_amounts: <span class="ty">Vec</span>&lt;<span class="ty">i128</span>&gt;,
+  from: <span class="ty">Address</span>,
+) -> <span class="ty">Result</span>&lt;<span class="ty">Vec</span>&lt;<span class="ty">i128</span>&gt;, <span class="ty">ContractError</span>&gt;</div>
+          <button class="btn btn-p btn-full" style="margin-top:8px" onclick="toast('⚡ Retiro de DeFindex simulado','indigo')">Simular Retiro</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- X402 -->
+    <div class="page" id="p-x402">
+      <div class="grid2">
+        <div class="card">
+          <div class="card-title">⚡ Terminal x402 — Interactiva</div>
+          <div class="terminal" id="terminal">
+<span class="t-prompt">$</span> <span class="t-cmd">agent-vault x402 --resource /api/data</span>
+<span class="t-out">→ GET https://api.example.com/data</span>
+<span class="t-err">← 402 Payment Required</span>
+<span class="t-out">→ Construyendo pago Stellar...</span>
+<span class="t-out">→ Vault policy check: ✓ OK</span>
+<span class="t-out">→ Enviando 50 MXNe a api.example.com</span>
+<span class="t-out">← 200 OK — Recurso entregado ✓</span>
+          </div>
+          <button class="btn btn-p btn-full" style="margin-top:12px" onclick="runX402()">▶ Ejecutar Demo</button>
+        </div>
+        <div class="card">
+          <div class="card-title">📡 Flujo x402 — 6 Pasos</div>
+          <div style="display:flex;flex-direction:column;gap:8px" id="x402-steps">
+            <div class="x-step" data-state="done"><span class="badge b-green">✓</span> <span style="font-size:13px">Agente solicita recurso HTTP</span></div>
+            <div class="x-step" data-state="done"><span class="badge b-green">✓</span> <span style="font-size:13px">Servidor responde 402 + precio</span></div>
+            <div class="x-step" data-state="done"><span class="badge b-green">✓</span> <span style="font-size:13px">Vault verifica políticas</span></div>
+            <div class="x-step" data-state="done"><span class="badge b-green">✓</span> <span style="font-size:13px">Pago Stellar ejecutado</span></div>
+            <div class="x-step" data-state="done"><span class="badge b-green">✓</span> <span style="font-size:13px">Servidor verifica on-chain</span></div>
+            <div class="x-step" data-state="done"><span class="badge b-green">✓</span> <span style="font-size:13px">Recurso entregado al agente</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">🔒 Recursos Protegidos</div>
+        <div class="grid3">
+          <div class="card" style="cursor:pointer;border-color:rgba(99,102,241,.3)" onclick="toast('💳 Pagando 50 MXNe por /api/market-data...','indigo')">
+            <div style="font-size:24px;margin-bottom:8px">📊</div>
+            <div style="font-weight:600;font-size:13px">/api/market-data</div>
+            <div style="font-size:11px;color:var(--muted);margin:4px 0">Precio: 50 MXNe</div>
+            <span class="badge b-indigo">Click para pagar</span>
+          </div>
+          <div class="card" style="cursor:pointer;border-color:rgba(16,185,129,.3)" onclick="toast('💳 Pagando 120 MXNe por /api/ai-inference...','green')">
+            <div style="font-size:24px;margin-bottom:8px">🤖</div>
+            <div style="font-weight:600;font-size:13px">/api/ai-inference</div>
+            <div style="font-size:11px;color:var(--muted);margin:4px 0">Precio: 120 MXNe</div>
+            <span class="badge b-green">Click para pagar</span>
+          </div>
+          <div class="card" style="cursor:pointer;border-color:rgba(245,158,11,.3)" onclick="toast('💳 Pagando 200 MXNe por /api/kyc-verify...','amber')">
+            <div style="font-size:24px;margin-bottom:8px">🛡️</div>
+            <div style="font-weight:600;font-size:13px">/api/kyc-verify</div>
+            <div style="font-size:11px;color:var(--muted);margin:4px 0">Precio: 200 MXNe</div>
+            <span class="badge b-amber">Click para pagar</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- AGENTES -->
+    <div class="page" id="p-agentes">
+      <div class="agent-grid">
+        <div class="agent-card">
+          <div class="agent-avatar" style="background:rgba(99,102,241,.15)">🤖</div>
+          <div style="font-weight:600;margin-bottom:4px">Agente Nómina</div>
+          <div style="font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-bottom:10px">GCSG...PAJL</div>
+          <span class="badge b-green">🟢 Activo</span>
+          <div class="prog-wrap" style="margin-top:12px">
+            <div class="prog-label"><span>Límite diario</span><span class="v-green">3,200 / 5,000</span></div>
+            <div class="prog-bar"><div class="prog-fill pf-green" style="width:64%"></div></div>
+          </div>
+          <button class="btn btn-p btn-full btn-sm" style="margin-top:10px" onclick="openModal('Agente Nómina','5,000')">💸 Ejecutar Pago</button>
+        </div>
+        <div class="agent-card">
+          <div class="agent-avatar" style="background:rgba(245,158,11,.15)">🏭</div>
+          <div style="font-weight:600;margin-bottom:4px">Agente Proveedores</div>
+          <div style="font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-bottom:10px">GABC...1234</div>
+          <span class="badge b-amber">⚠️ Límite alto</span>
+          <div class="prog-wrap" style="margin-top:12px">
+            <div class="prog-label"><span>Límite diario</span><span class="v-amber">4,500 / 5,000</span></div>
+            <div class="prog-bar"><div class="prog-fill pf-amber" style="width:90%"></div></div>
+          </div>
+          <button class="btn btn-p btn-full btn-sm" style="margin-top:10px" onclick="openModal('Agente Proveedores','500')">💸 Ejecutar Pago</button>
+        </div>
+        <div class="agent-card">
+          <div class="agent-avatar" style="background:rgba(6,182,212,.15)">⚡</div>
+          <div style="font-weight:600;margin-bottom:4px">Agente x402</div>
+          <div style="font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-bottom:10px">GXYZ...5678</div>
+          <span class="badge b-cyan">🔵 Activo</span>
+          <div class="prog-wrap" style="margin-top:12px">
+            <div class="prog-label"><span>Límite diario</span><span class="v-cyan">800 / 2,000</span></div>
+            <div class="prog-bar"><div class="prog-fill pf-indigo" style="width:40%"></div></div>
+          </div>
+          <button class="btn btn-p btn-full btn-sm" style="margin-top:10px" onclick="openModal('Agente x402','2,000')">💸 Ejecutar Pago</button>
+        </div>
+        <div class="agent-card">
+          <div class="agent-avatar" style="background:rgba(239,68,68,.15)">⏸️</div>
+          <div style="font-weight:600;margin-bottom:4px">Agente SPEI</div>
+          <div style="font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-bottom:10px">GDEF...9012</div>
+          <span class="badge b-red">⏸️ Pausado</span>
+          <div class="prog-wrap" style="margin-top:12px">
+            <div class="prog-label"><span>Límite diario</span><span>1,200 / 10,000</span></div>
+            <div class="prog-bar"><div class="prog-fill pf-green" style="width:12%"></div></div>
+          </div>
+          <button class="btn btn-full btn-sm" style="margin-top:10px;background:rgba(239,68,68,.15);color:var(--red);border:1px solid rgba(239,68,68,.3)" onclick="toast('⏸️ Vault pausado — no puede ejecutar pagos','red')">🔒 Vault Pausado</button>
+        </div>
+        <div class="agent-card">
+          <div class="agent-avatar" style="background:rgba(16,185,129,.15)">🌎</div>
+          <div style="font-weight:600;margin-bottom:4px">Agente Etherfuse</div>
+          <div style="font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-bottom:10px">GHIJ...3456</div>
+          <span class="badge b-green">🟢 Activo</span>
+          <div class="prog-wrap" style="margin-top:12px">
+            <div class="prog-label"><span>Límite diario</span><span class="v-green">0 / 20,000</span></div>
+            <div class="prog-bar"><div class="prog-fill pf-green" style="width:0%"></div></div>
+          </div>
+          <button class="btn btn-g btn-full btn-sm" style="margin-top:10px" onclick="openModal('Agente Etherfuse','20,000')">💸 Ejecutar Pago</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- AUDITORIA -->
+    <div class="page" id="p-auditoria">
+      <div class="card">
+        <div class="card-title">🔍 Registro de Transacciones</div>
+        <div style="display:flex;gap:10px;margin-bottom:16px">
+          <input class="inp" style="max-width:220px;margin:0" placeholder="Buscar hash...">
+          <select class="inp" style="max-width:160px;margin:0"><option>Todos los tipos</option><option>deposit</option><option>transfer</option><option>x402</option><option>withdraw</option></select>
+          <select class="inp" style="max-width:160px;margin:0"><option>Todos los estados</option><option>✓ OK</option><option>✗ Rechazado</option></select>
+        </div>
+        <table class="table">
+          <tr><th>Hash</th><th>Tipo</th><th>Agente</th><th>Monto</th><th>Destinatario</th><th>Estado</th><th>Ledger</th></tr>
+          <tr><td class="mono">a3f7...c2d1</td><td>deposit</td><td>Owner</td><td class="v-green">+10,000 MXNe</td><td class="mono">Vault</td><td><span class="badge b-green">✓ OK</span></td><td class="mono">1,624,201</td></tr>
+          <tr><td class="mono">b8e2...a4f9</td><td>transfer</td><td>Nómina</td><td class="v-amber">-3,200 MXNe</td><td class="mono">GCSG...PAJL</td><td><span class="badge b-green">✓ OK</span></td><td class="mono">1,624,210</td></tr>
+          <tr><td class="mono">c1d5...f3b8</td><td>x402</td><td>x402</td><td class="v-cyan">-50 MXNe</td><td class="mono">api.example</td><td><span class="badge b-cyan">✓ OK</span></td><td class="mono">1,624,218</td></tr>
+          <tr><td class="mono">d9a1...e7c4</td><td>transfer</td><td>Proveedores</td><td class="v-red">-8,000 MXNe</td><td class="mono">GABC...1234</td><td><span class="badge b-red">✗ Límite</span></td><td class="mono">1,624,225</td></tr>
+          <tr><td class="mono">e2b3...d8a1</td><td>withdraw</td><td>Owner</td><td class="v-amber">-5,000 MXNe</td><td class="mono">Owner</td><td><span class="badge b-green">✓ OK</span></td><td class="mono">1,624,230</td></tr>
+        </table>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
+          <button class="btn" style="background:var(--surf2);color:var(--muted)">← Anterior</button>
+          <button class="btn btn-p">Siguiente →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ETHERFUSE -->
+    <div class="page" id="p-etherfuse">
+      <div class="card" style="background:linear-gradient(135deg,rgba(16,185,129,.06),rgba(6,182,212,.04));border-color:rgba(16,185,129,.3)">
+        <div class="card-title">🌎 Etherfuse — Puente MXNe → SPEI → Banco Mexicano</div>
+        <div class="ef-flow">
+          <div class="ef-step"><div class="ef-step-num">1</div><div class="ef-step-icon">🏦</div><div class="ef-step-label">Agent Vault</div><div class="ef-step-sub">MXNe on Stellar</div></div>
+          <div class="ef-step"><div class="ef-step-num">2</div><div class="ef-step-icon">⚡</div><div class="ef-step-label">execute_transfer</div><div class="ef-step-sub">Policy check</div></div>
+          <div class="ef-step"><div class="ef-step-num">3</div><div class="ef-step-icon">🌐</div><div class="ef-step-label">Etherfuse</div><div class="ef-step-sub">Anchor Stellar</div></div>
+          <div class="ef-step"><div class="ef-step-num">4</div><div class="ef-step-icon">💱</div><div class="ef-step-label">MXNe → MXN</div><div class="ef-step-sub">Tipo de cambio</div></div>
+          <div class="ef-step"><div class="ef-step-num">5</div><div class="ef-step-icon">🏦</div><div class="ef-step-label">SPEI</div><div class="ef-step-sub">Banco mexicano</div></div>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="card">
+          <div class="card-title">💱 Estadísticas de Conversión</div>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;justify-content:space-between;padding:10px;background:var(--surf2);border-radius:8px"><span style="color:var(--muted);font-size:13px">Token</span><span class="badge b-green">MXNe (Etherfuse)</span></div>
+            <div style="display:flex;justify-content:space-between;padding:10px;background:var(--surf2);border-radius:8px"><span style="color:var(--muted);font-size:13px">Issuer</span><span class="mono" style="font-size:11px;color:var(--cyan)">GCHQ7...BUHBLA</span></div>
+            <div style="display:flex;justify-content:space-between;padding:10px;background:var(--surf2);border-radius:8px"><span style="color:var(--muted);font-size:13px">1 MXNe</span><span style="color:var(--green);font-weight:600">= 1 MXN</span></div>
+            <div style="display:flex;justify-content:space-between;padding:10px;background:var(--surf2);border-radius:8px"><span style="color:var(--muted);font-size:13px">Red</span><span class="badge b-cyan">Stellar Testnet</span></div>
+            <div style="display:flex;justify-content:space-between;padding:10px;background:var(--surf2);border-radius:8px"><span style="color:var(--muted);font-size:13px">Método</span><span class="badge b-indigo">SPEI</span></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">💸 Simular Pago SPEI</div>
+          <input class="inp" placeholder="Nombre del destinatario" id="ef-name">
+          <input class="inp" placeholder="Monto en MXNe" type="number" id="ef-amt" oninput="document.getElementById('ef-preview').textContent='≈ '+((parseFloat(this.value)||0)).toLocaleString()+' MXN via SPEI'">
+          <input class="inp" placeholder="CLABE (18 dígitos)" id="ef-clabe">
+          <div id="ef-preview" style="font-size:12px;color:var(--muted);margin-bottom:12px"></div>
+          <button class="btn btn-g btn-full" onclick="doEF()">🌎 Enviar via SPEI</button>
+          <div id="ef-msg"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">🔗 API Endpoint Etherfuse</div>
+        <div class="code-block"><span class="cm">// Pago via Stellar — el memo lleva la CLABE</span>
+<span class="kw">const</span> tx = <span class="kw">await</span> server.<span class="fn">loadAccount</span>(vaultAddress);
+tx.<span class="fn">addOperation</span>(StellarSdk.Operation.<span class="fn">payment</span>({
+  destination: <span class="st">"ETHERFUSE_STELLAR_ADDRESS"</span>,
+  asset: MXNeAsset,
+  amount: amount.toString(),
+}));
+tx.<span class="fn">addMemo</span>(StellarSdk.Memo.<span class="fn">text</span>(clabeDestinatario));
+<span class="cm">// Etherfuse detecta el pago y hace el SPEI automáticamente</span></div>
+      </div>
+    </div>
+
+    <!-- EQUIPO -->
+    <div class="page" id="p-equipo">
+      <div class="team-grid">
+        <div class="team-card">
+          <div class="team-avatar" style="background:rgba(99,102,241,.15)">🏗️</div>
+          <div style="font-weight:700">Persona 1</div>
+          <div class="team-role">Arquitecto Soroban</div>
+          <span class="badge b-indigo">Rust · Soroban</span>
+          <div class="checklist">
+            <div class="check-item done">✓ Contrato desplegado testnet</div>
+            <div class="check-item done">✓ Policy Engine completo</div>
+            <div class="check-item done">✓ Tokens reales (MXNe)</div>
+            <div class="check-item done">✓ 8 funciones implementadas</div>
+          </div>
+        </div>
+        <div class="team-card">
+          <div class="team-avatar" style="background:rgba(16,185,129,.15)">🔌</div>
+          <div style="font-weight:700">Persona 2</div>
+          <div class="team-role">Integración DeFindex + x402</div>
+          <span class="badge b-green">DeFindex · x402</span>
+          <div class="checklist">
+            <div class="check-item done">✓ DeFindex documentado</div>
+            <div class="check-item done">✓ x402 demo funcional</div>
+            <div class="check-item">○ Integración completa</div>
+          </div>
+        </div>
+        <div class="team-card">
+          <div class="team-avatar" style="background:rgba(6,182,212,.15)">🖥️</div>
+          <div style="font-weight:700">Persona 3</div>
+          <div class="team-role">Frontend + Demo</div>
+          <span class="badge b-cyan">React · Stellar SDK</span>
+          <div class="checklist">
+            <div class="check-item done">✓ UI componentes</div>
+            <div class="check-item done">✓ Freighter conectado</div>
+            <div class="check-item done">✓ SDK integrado</div>
+          </div>
+        </div>
+        <div class="team-card">
+          <div class="team-avatar" style="background:rgba(245,158,11,.15)">🌎</div>
+          <div style="font-weight:700">Persona 4</div>
+          <div class="team-role">Etherfuse + Pitch</div>
+          <span class="badge b-amber">Etherfuse · SPEI</span>
+          <div class="checklist">
+            <div class="check-item done">✓ Flujo Etherfuse documentado</div>
+            <div class="check-item done">✓ Pitch preparado</div>
+            <div class="check-item done">✓ Casos de uso MX</div>
+          </div>
+        </div>
+        <div class="team-card">
+          <div class="team-avatar" style="background:rgba(239,68,68,.15)">🔍</div>
+          <div style="font-weight:700">Persona 5</div>
+          <div class="team-role">QA + Coordinación</div>
+          <span class="badge b-red">QA · DevOps</span>
+          <div class="checklist">
+            <div class="check-item done">✓ Ambiente testnet</div>
+            <div class="check-item done">✓ Contrato probado</div>
+            <div class="check-item done">✓ Demo grabado</div>
+            <div class="check-item done">✓ Equipo coordinado</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /main -->
+</div><!-- /app -->
+
+<!-- MODAL -->
+<div class="modal-bg" id="modal">
+  <div class="modal">
+    <div style="font-size:18px;font-weight:700;margin-bottom:16px">💸 Ejecutar Pago</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:14px">Agente: <span id="modal-agent" style="color:var(--cyan)"></span> · Disponible: <span id="modal-limit" style="color:var(--green)"></span> MXNe</div>
+    <input class="inp" placeholder="Dirección destino (G...)" id="modal-to">
+    <input class="inp" placeholder="Monto en MXNe" type="number" id="modal-amt">
+    <div style="display:flex;gap:10px;margin-top:4px">
+      <button class="btn btn-p" style="flex:1" onclick="doModalPay()">Confirmar Pago</button>
+      <button class="btn" style="background:var(--surf2);color:var(--muted)" onclick="closeModal()">Cancelar</button>
+    </div>
+    <div id="modal-msg"></div>
+  </div>
+</div>
+
+<!-- TOASTS -->
+<div class="toast-wrap" id="toasts"></div>
+
+<script>
+// BG HEXAGONS
+const canvas = document.getElementById('bg')
+const ctx = canvas.getContext('2d')
+let W,H,hexes=[]
+function resize(){W=canvas.width=innerWidth;H=canvas.height=innerHeight;hexes=[]}
+function randHex(){return{x:Math.random()*W,y:Math.random()*H,r:Math.random()*20+8,vx:(Math.random()-.5)*.3,vy:(Math.random()-.5)*.3,a:Math.random()*Math.PI*2,va:(Math.random()-.5)*.005,op:Math.random()*.3+.05}}
+function drawHex(h){ctx.save();ctx.translate(h.x,h.y);ctx.rotate(h.a);ctx.beginPath();for(let i=0;i<6;i++){const a=i*Math.PI/3;i===0?ctx.moveTo(h.r*Math.cos(a),h.r*Math.sin(a)):ctx.lineTo(h.r*Math.cos(a),h.r*Math.sin(a))}ctx.closePath();ctx.strokeStyle=`rgba(99,102,241,${h.op})`;ctx.lineWidth=.8;ctx.stroke();ctx.restore()}
+function loop(){ctx.clearRect(0,0,W,H);if(hexes.length<40)hexes.push(randHex());hexes.forEach(h=>{h.x+=h.vx;h.y+=h.vy;h.a+=h.va;if(h.x<-50)h.x=W+50;if(h.x>W+50)h.x=-50;if(h.y<-50)h.y=H+50;if(h.y>H+50)h.y=-50;drawHex(h)});requestAnimationFrame(loop)}
+resize();window.addEventListener('resize',resize);loop()
+
+// CLOCK
+function tick(){const n=new Date();document.getElementById('clock').textContent=n.toTimeString().slice(0,8)}
+setInterval(tick,1000);tick()
+
+// BLOCK
+let block=1624238
+setInterval(()=>{block++;document.getElementById('block').textContent=block.toLocaleString()},5000)
+
+// YIELD
+let yieldVal=347
+setInterval(()=>{yieldVal+=Math.random()*.5;const v=yieldVal.toFixed(1);document.getElementById('yield-val').innerHTML=`+${v} <span style="font-size:14px">MXNe</span>`;const yb=document.getElementById('yield-big');if(yb)yb.textContent=`+${v} MXNe`},3000)
+
+// NAV
+const titles={dashboard:'Dashboard',contrato:'Contrato Soroban',defindex:'DeFindex',x402:'x402 Protocol',agentes:'Agentes',auditoria:'Auditoría',etherfuse:'Etherfuse SPEI',equipo:'Equipo'}
+function go(id,btn){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'))
+  document.getElementById('p-'+id).classList.add('active')
+  document.querySelectorAll('.nav-item').forEach(b=>{b.classList.remove('active')})
+  btn.classList.add('active')
+  document.getElementById('page-title').textContent=titles[id]
+  document.getElementById('page-crumb').textContent=titles[id]
+}
+
+// TOAST
+function toast(msg,color='indigo'){
+  const colors={indigo:'var(--indigo)',green:'var(--green)',amber:'var(--amber)',red:'var(--red)',cyan:'var(--cyan)'}
+  const t=document.createElement('div')
+  t.className='toast'
+  t.style.borderLeftColor=colors[color]||colors.indigo
+  t.textContent=msg
+  document.getElementById('toasts').appendChild(t)
+  setTimeout(()=>t.remove(),3500)
+}
+
+// MODAL
+function openModal(agent,limit){
+  document.getElementById('modal-agent').textContent=agent
+  document.getElementById('modal-limit').textContent=limit
+  document.getElementById('modal-to').value=''
+  document.getElementById('modal-amt').value=''
+  document.getElementById('modal-msg').innerHTML=''
+  document.getElementById('modal').classList.add('open')
+}
+function closeModal(){document.getElementById('modal').classList.remove('open')}
+function doModalPay(){
+  const to=document.getElementById('modal-to').value
+  const amt=parseFloat(document.getElementById('modal-amt').value)
+  if(!to||!amt){document.getElementById('modal-msg').innerHTML='<div style="color:var(--red);font-size:12px;margin-top:8px">Completa todos los campos</div>';return}
+  document.getElementById('modal-msg').innerHTML=`<div style="color:var(--green);font-size:12px;margin-top:8px">✓ Pago de ${amt.toLocaleString()} MXNe ejecutado — verificando en Stellar...</div>`
+  setTimeout(()=>{closeModal();toast(`✅ ${amt.toLocaleString()} MXNe transferidos correctamente`,'green')},1500)
+}
+
+// ETHERFUSE
+async function doEF(){
+  const name=document.getElementById('ef-name').value
+  const amt=parseFloat(document.getElementById('ef-amt').value)
+  const clabe=document.getElementById('ef-clabe').value
+  if(!name||!amt||!clabe){document.getElementById('ef-msg').innerHTML='<div style="color:var(--red);font-size:12px;margin-top:8px">Completa todos los campos</div>';return}
+  const msgs=['⏳ Vault verificando políticas...','⏳ Enviando MXNe a Etherfuse...','⏳ Convirtiendo MXNe → MXN...','⏳ Procesando SPEI...']
+  const el=document.getElementById('ef-msg')
+  for(const m of msgs){el.innerHTML=`<div style="color:var(--cyan);font-size:12px;margin-top:8px">${m}</div>`;await new Promise(r=>setTimeout(r,1100))}
+  el.innerHTML=`<div style="color:var(--green);font-size:12px;margin-top:8px">✅ $${amt.toLocaleString()} MXN depositados en CLABE ${clabe} a nombre de ${name}</div>`
+  toast(`✅ SPEI exitoso: $${amt.toLocaleString()} MXN → ${name}`,'green')
+}
+
+// X402
+async function runX402(){
+  const t=document.getElementById('terminal')
+  const lines=[
+    '<span class="t-prompt">$</span> <span class="t-cmd">agent-vault x402 --resource /api/market-data</span>',
+    '<span class="t-out">→ GET https://api.example.com/market-data</span>',
+    '<span class="t-err">← 402 Payment Required — Price: 50 MXNe</span>',
+    '<span class="t-out">→ Consultando vault policies...</span>',
+    '<span class="t-out">→ Policy check: whitelist ✓ límite ✓ saldo ✓</span>',
+    '<span class="t-out">→ Construyendo tx Stellar...</span>',
+    '<span class="t-out">→ Firmando con Freighter...</span>',
+    '<span class="t-out">→ Enviando 50 MXNe a api.example.com</span>',
+    '<span class="t-out">← TX confirmada: ledger #1,624,241</span>',
+    '<span class="t-out">← 200 OK — {"data":"market_feed","timestamp":"...","price":17.21}</span>',
+    '<span class="t-out">✅ Recurso entregado. Costo: 50 MXNe</span>',
+  ]
+  t.innerHTML=''
+  for(const l of lines){t.innerHTML+=l+'\n';await new Promise(r=>setTimeout(r,600))}
+}
+</script>
+</body>
+</html>
